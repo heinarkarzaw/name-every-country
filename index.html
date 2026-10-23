@@ -221,38 +221,36 @@ div.mode:hover { border-color: var(--line); background: rgba(255,255,255,.03); }
 .menu-foot { display: flex; justify-content: center; padding-top: 2px; }
 .card .actions { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
 
-/* phones held upright: the side panel spans the width */
-@media (max-width: 760px) and (orientation: portrait) {
-  .dock { left: max(16px, env(safe-area-inset-left, 0px)); width: auto; top: calc(env(safe-area-inset-top, 0px) + 84px); }
-  .dock.collapsed { transform: translateX(calc(100% + 2 * max(16px, env(safe-area-inset-right, 0px)))); }
-  .handle { left: 0; z-index: 1; border-radius: 0 10px 10px 0; border: 1px solid var(--line); border-left: 0; }
-  .panel { padding-left: 38px; }
-  .dock.collapsed .handle { left: -50px; border-radius: 10px 0 0 10px; border: 1px solid var(--line); border-right: 0; }
-}
-/* phones turned sideways: short screen, so a narrow side panel and a compact layout */
-@media (max-height: 520px) and (orientation: landscape) {
-  .hud { padding-top: 8px; }
-  .brand h1 { font-size: 17px; }
-  .brand p { display: none; }
-  .stat { padding: 4px 10px; }
-  .stat .value { font-size: 17px; }
-  .dock { width: min(260px, 40vw); top: calc(env(safe-area-inset-top, 0px) + 52px); bottom: calc(env(safe-area-inset-bottom, 0px) + 66px); }
-  .panel { padding: 10px; }
-  .menu h2 { font-size: 16px; }
-  .menu > p, .mode .mode-desc { display: none; }
-  .mode { padding: 10px; gap: 6px; }
-  .console { padding-top: 6px; padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 8px); }
-  .console-inner { width: min(560px, calc(100% - min(260px, 40vw) - 24px)); margin-right: auto; gap: 4px; }
-  #answer { font-size: 16px; padding: 9px 12px; }
-  .row .btn { padding: 0 12px; }
-  .toast { font-size: 12px; min-height: 16px; }
-  .flagcard { width: min(120px, 22vw); }
-  .learncard { grid-template-columns: 72px minmax(0, 1fr); gap: 10px; padding: 8px 10px; }
-  .learncard img { width: 72px; }
-  .lc-name { font-size: 17px; }
-  .lc-official, .lc-region { display: none; }
-  .lc-facts { margin-top: 4px; }
-}
+/* phones held upright (html.upright, set from the device's real orientation): the side panel spans the width */
+html.upright .dock { left: max(16px, env(safe-area-inset-left, 0px)); width: auto; top: calc(env(safe-area-inset-top, 0px) + 84px); }
+html.upright .dock.collapsed { transform: translateX(calc(100% + 2 * max(16px, env(safe-area-inset-right, 0px)))); }
+html.upright .handle { left: 0; z-index: 1; border-radius: 0 10px 10px 0; border: 1px solid var(--line); border-left: 0; }
+html.upright .panel { padding-left: 38px; }
+html.upright .dock.collapsed .handle { left: -50px; border-radius: 10px 0 0 10px; border: 1px solid var(--line); border-right: 0; }
+
+/* phones turned sideways (html.sideways): a narrow side panel and a compact layout */
+html.sideways .hud { padding-top: 8px; }
+html.sideways .brand h1 { font-size: 17px; }
+html.sideways .brand p { display: none; }
+html.sideways .stat { padding: 4px 10px; }
+html.sideways .stat .value { font-size: 17px; }
+html.sideways .dock { width: min(260px, 40vw); top: calc(env(safe-area-inset-top, 0px) + 52px); bottom: calc(env(safe-area-inset-bottom, 0px) + 66px); }
+html.sideways .panel { padding: 10px; }
+html.sideways .menu h2 { font-size: 16px; }
+html.sideways .menu > p, html.sideways .mode .mode-desc { display: none; }
+html.sideways .mode { padding: 10px; gap: 6px; }
+html.sideways .console { padding-top: 6px; padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 8px); }
+html.sideways .console-inner { width: min(560px, calc(100% - min(260px, 40vw) - 24px)); margin-right: auto; gap: 4px; }
+html.sideways #answer { font-size: 16px; padding: 9px 12px; }
+html.sideways .row .btn { padding: 0 12px; }
+html.sideways .toast { font-size: 12px; min-height: 16px; }
+html.sideways .flagcard { width: min(120px, 22vw); }
+html.sideways .learncard { grid-template-columns: 72px minmax(0, 1fr); gap: 10px; padding: 8px 10px; }
+html.sideways .learncard img { width: 72px; }
+html.sideways .lc-name { font-size: 17px; }
+html.sideways .lc-official, html.sideways .lc-region { display: none; }
+html.sideways .lc-facts { margin-top: 4px; }
+
 @media (max-width: 760px) {
   .brand p { display: none; }
   .hud { flex-wrap: wrap; }
@@ -727,7 +725,26 @@ div.mode:hover { border-color: var(--line); background: rgba(255,255,255,.03); }
   const FLAGS = JSON.parse(document.getElementById('flagdata').textContent);
   const flagURL = code => 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(FLAGS[code] || '');
   let gameId = 0;                                  // bumps on every new game so stale timers do nothing
-  const isNarrow = () => window.matchMedia('(max-width: 760px), (max-height: 520px)').matches;
+  // Phone layouts are chosen from the device's real orientation. A CSS orientation query reads the
+  // visible area instead, and the on-screen keyboard makes that wider than tall, so typing used to
+  // switch an upright phone to the compact sideways layout and shrink the answer box.
+  function phoneLayout() {
+    const root = document.documentElement;
+    const typing = document.activeElement === input;
+    // while the keyboard is up, keep whatever layout was showing; re-check once typing stops
+    if (typing && (root.classList.contains('upright') || root.classList.contains('sideways'))) return;
+    const short = Math.min(screen.width, screen.height);
+    const sideways = screen.orientation && screen.orientation.type ? screen.orientation.type.startsWith('landscape')
+      : typing ? root.classList.contains('sideways') : window.innerWidth > window.innerHeight;
+    const phone = short <= 520 || window.innerWidth <= 760;
+    root.classList.toggle('sideways', phone && sideways && short <= 520);
+    root.classList.toggle('upright', phone && !sideways && window.innerWidth <= 760);
+  }
+  phoneLayout();
+  window.addEventListener('resize', phoneLayout);
+  input.addEventListener('blur', () => setTimeout(phoneLayout, 300));
+  if (screen.orientation && screen.orientation.addEventListener) screen.orientation.addEventListener('change', phoneLayout);
+  const isNarrow = () => document.documentElement.classList.contains('upright') || document.documentElement.classList.contains('sideways');
 
   const bestKey = (m, r) => 'nec-best-' + m + (r && r !== 'World' ? '-' + r : '');
   function getBest(m, r) { try { return JSON.parse(localStorage.getItem(bestKey(m, r)) || 'null'); } catch (e) { return null; } }
