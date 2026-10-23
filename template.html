@@ -1,0 +1,1100 @@
+<title>Name Every Country</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* Layout: full-bleed globe; HUD floats at the corners; answer bar docked at the bottom like a mission console. */
+:root {
+  --space: #05070d;
+  --ocean: #0b1a33;
+  --land: #2a3447;
+  --land-out: #192131;
+  --border: #7d8aa3;
+  --ink: #e8edf6;
+  --muted: #8a96ad;
+  --found: #2f8cff;
+  --found-hi: #7ab8ff;
+  --missed: #ff5d5d;
+  --target: #ffb020;
+  --pin: #ff4d6d;
+  --cap: #2fd6c3;
+  --panel: rgba(12, 17, 28, 0.92);
+  --line: rgba(160, 180, 215, 0.16);
+  --display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  color-scheme: dark;
+}
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body {
+  background: var(--space); color: var(--ink); font-family: var(--display);
+  overflow: hidden; margin: 0;
+}
+#globe { position: fixed; inset: 0; }
+#globe canvas { outline: none; }
+
+.hud {
+  position: fixed; top: env(safe-area-inset-top, 0px); left: 0; right: 0;
+  display: flex; justify-content: space-between; align-items: flex-start; gap: 12px;
+  padding-top: 16px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  pointer-events: none; z-index: 5;
+}
+.hud > * { pointer-events: auto; }
+.brand h1 { margin: 0; font-size: clamp(18px, 2.4vw, 26px); font-weight: 800; letter-spacing: -0.01em; }
+.brand p { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
+
+.stats { display: flex; gap: 10px; align-items: stretch; }
+.stat {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+  padding: 8px 14px; min-width: 0;
+}
+.stat .label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); }
+.stat .value { font-family: var(--mono); font-weight: 700; font-size: clamp(18px, 2.6vw, 26px); font-variant-numeric: tabular-nums; }
+.stat .value small { color: var(--muted); font-size: 0.6em; font-weight: 500; }
+button:focus-visible { outline: 2px solid var(--found-hi); outline-offset: 2px; }
+
+.dock {
+  position: fixed; right: max(16px, env(safe-area-inset-right, 0px)); top: calc(env(safe-area-inset-top, 0px) + 88px);
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 112px); width: 296px; z-index: 4;
+  transition: transform .34s cubic-bezier(.4, 0, .2, 1);
+}
+.dock.collapsed { transform: translateX(calc(100% + max(16px, env(safe-area-inset-right, 0px)))); }
+.handle {
+  position: absolute; left: -34px; top: 50%; transform: translateY(-50%); width: 28px; height: 64px;
+  border-radius: 10px 0 0 10px; border: 1px solid var(--line); border-right: 0;
+  background: var(--panel); color: var(--ink); font: 700 18px var(--display); cursor: pointer;
+  display: grid; place-items: center;
+}
+.handle:hover { color: var(--found-hi); }
+.handle svg { width: 14px; height: 14px; transition: transform .34s ease; }
+.dock.collapsed .handle svg { transform: rotate(180deg); }
+.panel {
+  position: absolute; inset: 0;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+  overflow-y: auto; padding: 14px;
+  transition: transform .34s cubic-bezier(.4, 0, .2, 1), opacity .34s ease;
+}
+.panel.is-menu { bottom: auto; max-height: 100%; }
+.panel.out { transform: translateX(calc(100% + 40px)); opacity: 0; pointer-events: none; }
+.menu { display: flex; flex-direction: column; gap: 12px; }
+.menu h2 { margin: 2px 0 0; font-size: 20px; font-weight: 800; }
+.menu > p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.45; }
+.mode {
+  text-align: left; font: inherit; color: var(--ink); cursor: pointer;
+  background: rgba(255,255,255,.03); border: 1.5px solid var(--line); border-radius: 12px;
+  padding: 14px; display: flex; flex-direction: column; gap: 6px; transition: border-color .15s, background .15s;
+}
+.mode:hover { border-color: var(--found); background: rgba(47,140,255,.08); }
+.mode .mode-name { font-size: 17px; font-weight: 800; display: flex; align-items: center; gap: 8px; }
+.mode .swatch { width: 10px; height: 10px; border-radius: 3px; background: var(--found); flex: none; }
+.mode.map .swatch { background: var(--target); }
+.mode.flag .swatch { background: linear-gradient(90deg, #e8edf6 50%, #ff5d5d 50%); }
+.mode .mode-desc { font-size: 13px; color: var(--muted); line-height: 1.45; }
+.regions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-top: 2px; }
+.regions .rchip:first-child { grid-column: 1 / -1; }
+.rchip {
+  font: 600 12px var(--display); color: var(--ink); cursor: pointer; padding: 5px 9px; border-radius: 7px;
+  background: rgba(160,180,215,.08); border: 1px solid var(--line); display: flex; justify-content: space-between; gap: 5px; align-items: baseline; white-space: nowrap;
+}
+.rchip small { font-family: var(--mono); font-size: 10px; color: var(--muted); }
+.rchip:hover { border-color: var(--found); background: rgba(47,140,255,.14); }
+.mode.map .rchip:hover { border-color: var(--target); background: rgba(255,176,32,.12); }
+div.mode { cursor: default; }
+div.mode:hover { border-color: var(--line); background: rgba(255,255,255,.03); }
+.mode .mode-best { font-family: var(--mono); font-size: 11px; color: var(--muted); letter-spacing: .02em; }
+.panel-head { display: flex; justify-content: space-between; align-items: center; padding-bottom: 6px; }
+.panel-head .tag { font-size: 11px; text-transform: uppercase; letter-spacing: .12em; color: var(--muted); }
+.panel-head .tag b { color: var(--ink); }
+.linkbtn { font: 700 12px var(--display); color: var(--found-hi); background: none; border: 0; cursor: pointer; padding: 4px 0; }
+.region { padding-block: 8px; border-bottom: 1px solid var(--line); }
+.region:last-child { border-bottom: 0; }
+.region-head { display: flex; justify-content: space-between; font-weight: 700; font-size: 14px; }
+.region-head span:last-child { font-family: var(--mono); color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.bar { height: 4px; background: var(--line); border-radius: 2px; margin: 6px 0 8px; overflow: hidden; }
+.bar i { display: block; height: 100%; width: 0; background: var(--found); transition: width .4s ease; }
+.names { display: flex; flex-wrap: wrap; gap: 4px; }
+.names span { font-size: 12px; padding: 2px 7px; border-radius: 4px; background: rgba(47,140,255,.16); color: var(--found-hi); }
+.names span.miss { background: rgba(255,93,93,.14); color: var(--missed); }
+
+.console {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 6;
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 18px); padding-top: 12px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex; justify-content: center; pointer-events: none;
+}
+.console-inner { pointer-events: auto; width: min(620px, 100%); display: flex; flex-direction: column; gap: 8px; }
+.toast { min-height: 20px; text-align: center; font-size: 14px; color: var(--muted); transition: color .2s; }
+.toast.ok { color: var(--found-hi); }
+.toast.dup { color: #ffc46b; }
+.row { display: flex; gap: 8px; }
+#answer {
+  flex: 1; min-width: 0; font: 600 20px var(--display); color: var(--ink);
+  background: rgba(10, 15, 26, 0.9); border: 1.5px solid var(--line); border-radius: 12px;
+  padding: 14px 18px; outline: none; transition: border-color .15s, box-shadow .15s;
+}
+#answer::placeholder { color: #5b6780; font-weight: 500; }
+#answer:focus { border-color: var(--found); box-shadow: 0 0 0 4px rgba(47,140,255,.18); }
+#answer.flash { border-color: var(--found-hi); box-shadow: 0 0 0 6px rgba(47,140,255,.3); }
+#answer:disabled { opacity: .5; }
+.btn {
+  font: 700 14px var(--display); border-radius: 12px; padding: 0 18px; cursor: pointer;
+  border: 1.5px solid var(--line); background: rgba(10,15,26,.9); color: var(--ink);
+}
+.btn:hover { border-color: var(--muted); }
+.btn.primary { background: var(--found); border-color: var(--found); color: #fff; }
+.btn:disabled { opacity: .45; cursor: default; }
+.toast.target { color: var(--target); }
+.flagcard {
+  align-self: center; width: min(230px, 46vw); aspect-ratio: 4 / 3; max-width: 100%;
+  border-radius: 8px; overflow: hidden; background: #fff;
+  box-shadow: 0 0 0 1px rgba(255,255,255,.18), 0 18px 40px rgba(0,0,0,.55);
+  transition: transform .25s ease, opacity .25s ease;
+}
+.learncard {
+  display: grid; grid-template-columns: 132px minmax(0, 1fr); gap: 14px; align-items: start;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px;
+  transition: opacity .2s ease;
+}
+.learncard.swap { opacity: .35; }
+.learncard img { width: 132px; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 6px; background: #fff; box-shadow: 0 0 0 1px rgba(255,255,255,.16); display: block; }
+.lc-region { font-size: 11px; text-transform: uppercase; letter-spacing: .12em; color: var(--muted); }
+.lc-name { margin: 2px 0 0; font-size: 24px; font-weight: 800; line-height: 1.1; text-wrap: balance; }
+.lc-official { margin: 2px 0 0; font-size: 13px; color: var(--muted); }
+.lc-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 10px 0 0; }
+.lc-facts dt { font-size: 10px; text-transform: uppercase; letter-spacing: .12em; color: var(--muted); }
+.lc-facts dd { margin: 2px 0 0; font-size: 14px; font-weight: 700; overflow-wrap: anywhere; }
+.lc-facts dd.mono { font-family: var(--mono); font-size: 12px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.lc-facts dd .pin-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--pin); margin-right: 6px; vertical-align: 1px; }
+.cap-pin { position: relative; width: 0; height: 0; pointer-events: none; }
+.cap-pin span {
+  position: absolute; bottom: 4px; left: 0; transform: translateX(-50%); white-space: nowrap;
+  font: 700 13px var(--display); color: #fff; background: rgba(10, 15, 26, .92);
+  border: 1.5px solid var(--pin); border-radius: 7px; padding: 3px 9px; box-shadow: 0 6px 16px rgba(0,0,0,.45);
+}
+.cap-pin.capital span { border-color: var(--cap); }
+.lc-close {
+  position: absolute; top: 8px; right: 8px; width: 28px; height: 28px; border-radius: 8px;
+  border: 1px solid var(--line); background: transparent; color: var(--muted); font: 700 16px var(--display); cursor: pointer;
+}
+.lc-close:hover { color: var(--ink); border-color: var(--muted); }
+.learncard { position: relative; }
+.learncard.menu-sel .lc-facts dd .pin-dot { background: var(--cap); }
+.cap-pin span small { display: block; font: 500 10px var(--display); color: var(--muted); text-transform: uppercase; letter-spacing: .1em; }
+.names button { font: inherit; font-size: 12px; padding: 2px 7px; border-radius: 4px; border: 0; cursor: pointer; background: rgba(160,180,215,.08); color: var(--ink); }
+.names button:hover { background: rgba(160,180,215,.18); }
+.names button.seen { color: var(--found-hi); }
+.names button.cur { background: var(--target); color: #1a1205; font-weight: 700; }
+.mode.learn .swatch { background: var(--pin); border-radius: 50%; }
+@media (max-width: 760px) {
+  .learncard { grid-template-columns: 84px minmax(0, 1fr); gap: 10px; padding: 10px; }
+  .learncard img { width: 84px; }
+  .lc-name { font-size: 19px; }
+  .lc-official { display: none; }
+  .lc-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+  .lc-facts .lc-area { display: none; }
+}
+.flagcard img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.flagcard.swap { transform: scale(.92); opacity: 0; }
+.flagcard.right { box-shadow: 0 0 0 3px var(--found), 0 18px 40px rgba(0,0,0,.55); }
+@media (max-height: 640px) { .flagcard { width: min(150px, 40vw); } }
+
+.overlay {
+  position: fixed; inset: 0; z-index: 10; display: grid; place-items: center;
+  background: rgba(3, 5, 10, .55); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.card {
+  background: #0d1424; border: 1px solid var(--line); border-radius: 16px; padding: 28px;
+  width: min(420px, 100%); text-align: center; display: flex; flex-direction: column; gap: 14px;
+}
+.card h2 { margin: 0; font-size: 28px; font-weight: 800; text-wrap: balance; }
+.card .big { font-family: var(--mono); font-size: 44px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.card p { margin: 0; color: var(--muted); line-height: 1.5; }
+.card .btn { padding: 14px 18px; font-size: 16px; }
+.card.credits { text-align: left; width: min(480px, 100%); max-height: calc(100% - 40px); overflow-y: auto; }
+.credits ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 12px; }
+.credits li { display: flex; flex-direction: column; gap: 2px; font-size: 14px; line-height: 1.45; }
+.credits li b { font-weight: 700; }
+.credits li span { color: var(--muted); font-size: 13px; }
+.credits a { color: var(--found-hi); }
+.menu-foot { display: flex; justify-content: center; padding-top: 2px; }
+.card .actions { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+
+/* phones held upright (html.upright, set from the device's real orientation): the side panel spans the width */
+html.upright .dock { left: max(16px, env(safe-area-inset-left, 0px)); width: auto; top: calc(env(safe-area-inset-top, 0px) + 84px); }
+html.upright .dock.collapsed { transform: translateX(calc(100% + 2 * max(16px, env(safe-area-inset-right, 0px)))); }
+html.upright .handle { left: 0; z-index: 1; border-radius: 0 10px 10px 0; border: 1px solid var(--line); border-left: 0; }
+html.upright .panel { padding-left: 38px; }
+html.upright .dock.collapsed .handle { left: -50px; border-radius: 10px 0 0 10px; border: 1px solid var(--line); border-right: 0; }
+
+/* phones turned sideways (html.sideways): a narrow side panel and a compact layout */
+html.sideways .hud { padding-top: 8px; }
+html.sideways .brand h1 { font-size: 17px; }
+html.sideways .brand p { display: none; }
+html.sideways .stat { padding: 4px 10px; }
+html.sideways .stat .value { font-size: 17px; }
+html.sideways .dock { width: min(260px, 40vw); top: calc(env(safe-area-inset-top, 0px) + 52px); bottom: calc(env(safe-area-inset-bottom, 0px) + 66px); }
+html.sideways .panel { padding: 10px; }
+html.sideways .menu h2 { font-size: 16px; }
+html.sideways .menu > p, html.sideways .mode .mode-desc { display: none; }
+html.sideways .mode { padding: 10px; gap: 6px; }
+html.sideways .console { padding-top: 6px; padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 8px); }
+html.sideways .console-inner { width: min(560px, calc(100% - min(260px, 40vw) - 24px)); margin-right: auto; gap: 4px; }
+html.sideways #answer { font-size: 16px; padding: 9px 12px; }
+html.sideways .row .btn { padding: 0 12px; }
+html.sideways .toast { font-size: 12px; min-height: 16px; }
+html.sideways .flagcard { width: min(120px, 22vw); }
+html.sideways .learncard { grid-template-columns: 72px minmax(0, 1fr); gap: 10px; padding: 8px 10px; }
+html.sideways .learncard img { width: 72px; }
+html.sideways .lc-name { font-size: 17px; }
+html.sideways .lc-official, html.sideways .lc-region { display: none; }
+html.sideways .lc-facts { margin-top: 4px; }
+
+@media (max-width: 760px) {
+  .brand p { display: none; }
+  .hud { flex-wrap: wrap; }
+  #answer { font-size: 17px; padding: 12px 14px; }
+  .row { gap: 6px; }
+  .row .btn { padding: 0 12px; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div id="globe" aria-label="3D world map"></div>
+
+<header class="hud">
+  <div class="brand">
+    <h1>Name Every Country</h1>
+    <p id="tagline">193 UN member states. Pick a mode to start.</p>
+  </div>
+  <div class="stats" id="stats" hidden>
+    <div class="stat"><div class="label" id="countLabel">Found</div><div class="value" id="count">0<small>/193</small></div></div>
+    <div class="stat" id="timeStat"><div class="label">Time</div><div class="value" id="time">00:00</div></div>
+  </div>
+</header>
+
+<div class="dock" id="dock">
+  <button class="handle" id="handle" aria-controls="panel" aria-expanded="true" aria-label="Hide side panel"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 2l5 5-5 5"/></svg></button>
+  <aside class="panel" id="panel" aria-label="Menu and progress"></aside>
+</div>
+
+<div class="console">
+  <div class="console-inner">
+    <div class="learncard" id="learncard" hidden>
+      <button class="lc-close" id="lcClose" hidden aria-label="Close country card">×</button>
+      <img id="lcFlag" alt="">
+      <div style="min-width:0">
+        <div class="lc-region" id="lcRegion"></div>
+        <h2 class="lc-name" id="lcName"></h2>
+        <p class="lc-official" id="lcOfficial"></p>
+        <dl class="lc-facts">
+          <div><dt>Capital</dt><dd><span class="pin-dot"></span><span id="lcCap"></span></dd></div>
+          <div><dt>Capital location</dt><dd class="mono" id="lcCoord"></dd></div>
+          <div class="lc-area"><dt>Area</dt><dd class="mono" id="lcArea"></dd></div>
+        </dl>
+      </div>
+    </div>
+    <div class="flagcard" id="flagcard" hidden><img id="flagimg" alt="Flag of the country to name"></div>
+    <div class="toast" id="toast" aria-live="polite">Choose a mode from the menu to start.</div>
+    <div class="row">
+      <button class="btn" id="menuBtn">Menu</button>
+      <input id="answer" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Choose a mode first" aria-label="Country name" disabled>
+      <button class="btn" id="prev" hidden aria-label="Previous country">‹ Prev</button>
+      <button class="btn" id="next" hidden aria-label="Next country">Next ›</button>
+      <button class="btn" id="skip" hidden>Skip</button>
+      <button class="btn" id="giveUp" disabled>Give up</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="overlay" hidden>
+  <div class="card" role="dialog" aria-labelledby="resTitle">
+    <h2 id="resTitle">Done</h2>
+    <div class="big" id="resScore">0/193</div>
+    <p id="resText"></p>
+    <div class="actions">
+      <button class="btn" id="reviewBtn">Look at the map</button>
+      <button class="btn" id="menuBtn2">Menu</button>
+      <button class="btn primary" id="againBtn">Play again</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="confirm" hidden>
+  <div class="card" role="dialog" aria-labelledby="cfTitle">
+    <h2 id="cfTitle">Give up?</h2>
+    <p>The countries you missed will show in red.</p>
+    <div class="actions">
+      <button class="btn" id="cfNo">Keep going</button>
+      <button class="btn primary" id="cfYes" style="background:var(--missed);border-color:var(--missed)">Give up</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="credits" hidden>
+  <div class="card credits" role="dialog" aria-labelledby="crTitle">
+    <h2 id="crTitle">Credits</h2>
+    <ul>
+      <li><b>Country borders</b><span>Natural Earth, 1:50m Admin 0 countries and populated places. Public domain.</span><a href="https://www.naturalearthdata.com" target="_blank" rel="noopener">naturalearthdata.com</a></li>
+      <li><b>Country names, regions and capitals</b><span>mledoze/countries, made available under the Open Database License (ODbL) 1.0. A few capitals were adjusted by hand.</span><a href="https://github.com/mledoze/countries" target="_blank" rel="noopener">github.com/mledoze/countries</a></li>
+      <li><b>Flag images</b><span>flag-icons, © 2013 Panayiotis Lipiridis, MIT License.</span><a href="https://github.com/lipis/flag-icons" target="_blank" rel="noopener">github.com/lipis/flag-icons</a></li>
+      <li><b>3D globe</b><span>globe.gl, © 2019 Vasco Asturiano, MIT License, built on three.js (MIT).</span><a href="https://github.com/vasturiano/globe.gl" target="_blank" rel="noopener">github.com/vasturiano/globe.gl</a></li>
+      <li><b>Fonts</b><span>Bricolage Grotesque and JetBrains Mono, SIL Open Font License, via Google Fonts.</span></li>
+      <li><b>About borders</b><span>Borders follow Natural Earth’s de facto lines. Some borders, territories and capitals are disputed; showing them here is not a political position.</span></li>
+    </ul>
+    <div class="actions"><button class="btn primary" id="crClose">Close</button></div>
+  </div>
+</div>
+
+<div class="overlay" id="leave" hidden>
+  <div class="card" role="dialog" aria-labelledby="lvTitle">
+    <h2 id="lvTitle">Leave this game?</h2>
+    <p>Your progress in this round will be lost.</p>
+    <div class="actions">
+      <button class="btn" id="lvNo">Keep playing</button>
+      <button class="btn primary" id="lvYes">Go to menu</button>
+    </div>
+  </div>
+</div>
+
+<script id="gamedata" type="application/json">__DATA__</script>
+<script id="flagdata" type="application/json">__FLAGS__</script>
+<script id="learndata" type="application/json">__LEARN__</script>
+<script src="https://cdn.jsdelivr.net/npm/globe.gl@2.45.0/dist/globe.gl.min.js"></script>
+<script>
+(function () {
+  const DATA = JSON.parse(document.getElementById('gamedata').textContent);
+  const C = DATA.countries;
+  const CODES = Object.keys(C);
+  const TOTAL = CODES.length;
+  // region chosen for the quiz modes; ACTIVE holds the countries that count
+  let region = 'World', ACTIVE = new Set(CODES);
+  const goal = () => ACTIVE.size;
+  const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  const COL = { land: css('--land'), found: css('--found'), missed: css('--missed'), border: css('--border'), ocean: css('--ocean'), target: css('--target') };
+  COL.out = css('--land-out');
+  const colorOf = s => s === 'found' ? COL.found : s === 'missed' ? COL.missed : s === 'target' ? COL.target : s === 'out' ? COL.out : COL.land;
+
+  // name lookup
+  const KEY = new Map();
+  CODES.forEach(code => C[code].k.forEach(k => KEY.set(k, code)));
+  const norm = s => s.normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase()
+    .replace(/&/g, 'and').replace(/saint /g, 'st ').replace(/st\. /g, 'st ').replace(/^the /, '').replace(/[^a-z]/g, '');
+
+  // state
+  const hot = window.claude && window.claude.hot;
+  let found = new Set(), revealed = false, startAt = null, elapsed = 0, timerId = null, pendingId = null;
+  // mode: null (menu) | 'free' (name them in any order) | 'map' (name the highlighted country)
+  let mode = null, target = null, queue = [], busy = false;
+
+  // small countries get a marker so they can be seen at globe scale
+  const SMALL = CODES.filter(c => C[c].a < 12000).map(c => ({ code: c, lat: C[c].ll[0], lng: C[c].ll[1] }));
+
+  // The whole map is painted onto one canvas that wraps the sphere as a texture.
+  // Rotating then draws a single mesh, which stays smooth even with detailed borders.
+  const FEATS = DATA.geo.features.map(f => {
+    const polys = f.geometry.type === 'Polygon' ? [f.geometry.coordinates] : f.geometry.coordinates;
+    let x0 = 180, x1 = -180, y0 = 90, y1 = -90;
+    polys.forEach(p => p[0].forEach(([x, y]) => { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }));
+    return { c: f.properties.c, n: f.properties.n, polys, bb: [x0, y0, x1, y1] };
+  });
+  const el = document.getElementById('globe');
+  const BLANK = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAABCAIAAAB7QOjdAAAADUlEQVR4nGPgljIGIgACHwCxY8eCqQAAAABJRU5ErkJggg==';
+  const globe = new Globe(el, { animateIn: true })
+    .backgroundColor(css('--space'))
+    .globeImageUrl(BLANK)
+    .showAtmosphere(true).atmosphereColor('#4d8dff').atmosphereAltitude(0.18)
+    .pointsData(SMALL)
+    .pointLat('lat').pointLng('lng')
+    .pointRadius(d => d.pin ? 0.16 : 0.22)
+    .pointAltitude(d => d.pin ? 0.07 : 0.004)
+    .htmlElementsData([])
+    .htmlLat('lat').htmlLng('lng').htmlAltitude(0.07)
+    .htmlElement(d => d.el)
+    .pointsMerge(false)
+    .pointsTransitionDuration(0)
+    .ringColor(d => d.cap ? (t => `rgba(47,214,195,${1 - t})`) : d.pin ? (t => `rgba(255,77,109,${1 - t})`) : (t => `rgba(255,176,32,${1 - t})`))
+    .ringMaxRadius(d => d.r).ringPropagationSpeed(d => d.r * 1.6).ringRepeatPeriod(900).ringAltitude(0.006);
+  const renderer = globe.renderer();
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+  globe.globeMaterial().shininess = 6;
+  globe.pointOfView({ lat: 20, lng: 96, altitude: 2.3 });
+
+  // Our own camera flight, driven by a critically damped spring. The camera keeps its speed when a new
+  // target arrives mid-flight, so clicking country after country curves smoothly instead of stopping
+  // and restarting. Far jumps lift the camera a little while it is still far from the target.
+  let camAnim = 0, camT = null, camV = { lat: 0, lng: 0, alt: 0 }, camLast = 0, camSmooth = 0.33;
+  function damp(cur, target, key, dt) {
+    const omega = 2 / camSmooth, x = omega * dt, ex = 1 / (1 + x + 0.48 * x * x + 0.235 * x * x * x);
+    const change = cur - target, temp = (camV[key] + omega * change) * dt;
+    camV[key] = (camV[key] - omega * temp) * ex;
+    return target + (change + temp) * ex;
+  }
+  function camStep(now) {
+    const dt = Math.min(0.05, (now - camLast) / 1000) || 0.016; camLast = now;
+    const p = globe.pointOfView();
+    const dLng = ((camT.lng - p.lng + 540) % 360) - 180;
+    const far = Math.hypot(camT.lat - p.lat, dLng);
+    const lat = damp(p.lat, camT.lat, 'lat', dt);
+    const lng = damp(p.lng, p.lng + dLng, 'lng', dt);
+    const alt = damp(p.altitude, camT.alt + Math.min(0.8, far / 120), 'alt', dt);
+    globe.pointOfView({ lat, lng, altitude: alt }, 0);
+    const moving = far > 0.02 || Math.abs(alt - camT.alt) > 0.002 || Math.abs(camV.lat) + Math.abs(camV.lng) + Math.abs(camV.alt) > 0.01;
+    if (!moving) globe.pointOfView({ lat: camT.lat, lng: camT.lng, altitude: camT.alt }, 0);   // settle exactly
+    camAnim = moving ? requestAnimationFrame(camStep) : 0;
+  }
+  function flyCam(lat, lng, alt, ms = 1200) {
+    cancelAnimationFrame(zoomAnim); zoomAnim = 0; zoomT = null;
+    camT = { lat, lng, alt }; camSmooth = ms / 3600;
+    if (!camAnim) { camV = { lat: 0, lng: 0, alt: 0 }; camLast = performance.now(); camAnim = requestAnimationFrame(camStep); }
+  }
+  el.addEventListener('pointerdown', () => { cancelAnimationFrame(camAnim); camAnim = 0; camV = { lat: 0, lng: 0, alt: 0 }; });
+  // Smooth wheel zoom. The wheel is handled here instead of by the orbit controls, which jump one step
+  // per notch. The camera glides to the new height; it also stops any flight that is in progress.
+  // Pinch-zoom on touch screens still goes through the controls.
+  let zoomT = null, zoomAnim = 0, zoomLast = 0;
+  const MIN_ALT = 0.1, MAX_ALT = 4;
+  function zoomStep(now) {
+    const dt = Math.min(0.05, (now - zoomLast) / 1000) || 0.016; zoomLast = now;
+    const p = globe.pointOfView();
+    const alt = p.altitude + (zoomT - p.altitude) * (1 - Math.exp(-dt * 11));
+    globe.pointOfView({ lat: p.lat, lng: p.lng, altitude: alt }, 0);
+    if (Math.abs(zoomT - alt) > 0.0008) zoomAnim = requestAnimationFrame(zoomStep);
+    else { zoomAnim = 0; zoomT = null; }
+  }
+  el.addEventListener('wheel', e => {
+    e.preventDefault(); e.stopPropagation();
+    cancelAnimationFrame(camAnim); camAnim = 0; camV = { lat: 0, lng: 0, alt: 0 };
+    ctr.autoRotate = false;
+    const px = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaMode === 2 ? e.deltaY * 400 : e.deltaY;
+    const base = zoomT != null ? zoomT : globe.pointOfView().altitude;
+    zoomT = Math.min(MAX_ALT, Math.max(MIN_ALT, base * Math.exp(Math.max(-300, Math.min(300, px)) * 0.0016)));
+    if (!zoomAnim) { zoomLast = performance.now(); zoomAnim = requestAnimationFrame(zoomStep); }
+  }, { capture: true, passive: false });   // the player takes over
+
+  const maxTex = renderer.capabilities.maxTextureSize || 4096;
+  const W = Math.min(maxTex, 4096), H = W / 2;
+  const map = document.createElement('canvas'); map.width = W; map.height = H;
+  // CPU-side canvases: uploading from them never forces the browser to read pixels back from the GPU
+  const g = map.getContext('2d', { willReadFrequently: true });
+  const px = x => (x + 180) / 360 * W, py = y => (90 - y) / 180 * H;
+  function trace(f) {
+    g.beginPath();
+    f.polys.forEach(p => p.forEach(ring => {
+      ring.forEach(([x, y], i) => i ? g.lineTo(px(x), py(y)) : g.moveTo(px(x), py(y)));
+      g.closePath();
+    }));
+  }
+  function drawMap() {
+    g.fillStyle = COL.ocean; g.fillRect(0, 0, W, H);
+    FEATS.forEach(f => { g.fillStyle = colorOf(stateOf(f.c)); trace(f); g.fill('evenodd'); });
+    g.lineJoin = 'round'; g.strokeStyle = COL.border; g.lineWidth = 0.9;
+    FEATS.forEach(f => { trace(f); g.stroke(); });
+  }
+  // Repaint only one country (fill, then its own outline) instead of the whole map.
+  const FEATS_BY = {}; FEATS.forEach(f => { if (f.c) (FEATS_BY[f.c] = FEATS_BY[f.c] || []).push(f); });
+  function drawOne(code) {
+    g.lineJoin = 'round'; g.strokeStyle = COL.border; g.lineWidth = 0.9;
+    const fill = colorOf(stateOf(code));
+    (FEATS_BY[code] || []).forEach(f => { g.fillStyle = fill; trace(f); g.fill('evenodd'); g.stroke(); });
+  }
+  let tex = null;
+  // Send only the changed rectangle of the map to the graphics card, not the whole 32 MB image.
+  // Each country's pixel rectangles on the map canvas: one per hemisphere, so countries that cross the
+  // 180° line (Russia, USA, Fiji, Kiribati) don't turn into a strip the full width of the map.
+  const RECTS = {};
+  function rectsOf(code) {
+    if (RECTS[code]) return RECTS[code];
+    const box = [[180, 90, -180, -90], [180, 90, -180, -90]];
+    (FEATS_BY[code] || []).forEach(f => f.polys.forEach(p => {
+      let x0 = 180, y0 = 90, x1 = -180, y1 = -90;
+      p[0].forEach(([x, y]) => { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; });
+      const bx = box[(x0 + x1) / 2 < 0 ? 0 : 1];
+      bx[0] = Math.min(bx[0], x0); bx[1] = Math.min(bx[1], y0); bx[2] = Math.max(bx[2], x1); bx[3] = Math.max(bx[3], y1);
+    }));
+    return RECTS[code] = box.filter(bx => bx[0] <= bx[2]).map(([x0, y0, x1, y1]) => {
+      const X = Math.max(0, Math.floor(px(x0)) - 3), Y = Math.max(0, Math.floor(py(y1)) - 3);
+      return { X, Y, w: Math.min(W, Math.ceil(px(x1)) + 3) - X, h: Math.min(H, Math.ceil(py(y0)) + 3) - Y };
+    });
+  }
+  // Send only the changed rectangles to the graphics card, then let the GPU rebuild the smaller
+  // zoomed-out copies (mipmaps). Measured on a real machine: 1–5 ms per country, against 3–13 ms for
+  // updating every copy from the CPU.
+  function uploadRegions(codes) {
+    try {
+      const glTex = renderer.properties.get(tex).__webglTexture;
+      if (!glTex) return false;
+      const gl = renderer.getContext();
+      gl.bindTexture(gl.TEXTURE_2D, glTex);
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, tex.flipY);
+      gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+      gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+      codes.forEach(code => rectsOf(code).forEach(({ X, Y, w, h }) => {
+        if (w <= 0 || h <= 0) return;
+        gl.texSubImage2D(gl.TEXTURE_2D, 0, X, tex.flipY ? H - Y - h : Y, w, h, gl.RGBA, gl.UNSIGNED_BYTE, g.getImageData(X, Y, w, h));
+      }));
+      gl.generateMipmap(gl.TEXTURE_2D);
+      renderer.resetState();
+      return true;
+    } catch (e) { try { renderer.resetState(); } catch (_) {} return false; }
+  }
+
+  // What colour each country currently has on the canvas. Repaint only countries whose colour changed,
+  // so starting a mode, opening the menu or skipping doesn't redraw and re-upload the whole world.
+  const painted = new Map();
+  const want = c => colorOf(stateOf(c));
+  function pushTexture() {
+    const mat = globe.globeMaterial();
+    if (!tex) {
+      // Wait until the library has finished loading its own placeholder image, then attach our own
+      // texture built from the map canvas. Reusing the library's texture raced with that load and
+      // could leave the globe blank.
+      const cur = mat.map, img = cur && cur.image;
+      const loaded = img && img !== map && img.width > 0 && (img.complete === undefined || img.complete);
+      if (!loaded) { clearTimeout(pushTexture.t); pushTexture.t = setTimeout(pushTexture, 60); return []; }
+      drawMap(); CODES.forEach(c => painted.set(c, want(c)));
+      tex = new cur.constructor(map);
+      tex.colorSpace = cur.colorSpace;
+      tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+      tex.needsUpdate = true;
+      attachTexture();
+      // safety net: if anything swaps the globe's texture back during start-up, put ours back
+      let checks = 0;
+      const guard = setInterval(() => { attachTexture(); if (++checks > 20) clearInterval(guard); }, 250);
+      return CODES;
+    }
+    if (mat.map !== tex) attachTexture();
+    const changed = CODES.filter(c => painted.get(c) !== want(c));
+    if (!changed.length) return changed;
+    if (changed.length <= 8) { flush(changed); return changed; }
+    // Many countries at once (Give up, Play again): spread the work over several frames,
+    // a few milliseconds each, so the spinning globe never freezes.
+    changed.forEach(c => pendingPaint.add(c));
+    if (!pendingRaf) pendingRaf = requestAnimationFrame(drainPaint);
+    return changed;
+  }
+  function attachTexture() {
+    const mat = globe.globeMaterial();
+    if (!tex || mat.map === tex) return;
+    mat.map = tex; if (mat.color) mat.color.set('#ffffff'); mat.needsUpdate = true;
+  }
+  const pendingPaint = new Set(); let pendingRaf = 0;
+  function flush(codes) {
+    codes.forEach(c => { drawOne(c); painted.set(c, want(c)); });
+    if (!uploadRegions(codes)) tex.needsUpdate = true;
+  }
+  function drainPaint() {
+    pendingRaf = 0;
+    // draw and upload one country at a time until ~4 ms of this frame is used, then continue next frame
+    const t0 = performance.now();
+    for (const c of pendingPaint) {
+      pendingPaint.delete(c);
+      if (painted.get(c) !== want(c)) {
+        drawOne(c); painted.set(c, want(c));
+        if (!uploadRegions([c])) { tex.needsUpdate = true; }
+      }
+      if (performance.now() - t0 > 4) break;
+    }
+    if (pendingPaint.size) pendingRaf = requestAnimationFrame(drainPaint);
+  }
+
+  // click a country to see its name, once it is found or revealed
+  function inRing(x, y, r) { let ins = false; for (let i = 0, j = r.length - 1; i < r.length; j = i++) { const [xi, yi] = r[i], [xj, yj] = r[j]; if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) ins = !ins; } return ins; }
+  function featureAt(lat, lng) {
+    return FEATS.find(f => lng >= f.bb[0] && lng <= f.bb[2] && lat >= f.bb[1] && lat <= f.bb[3] &&
+      f.polys.some(p => inRing(lng, lat, p[0]) && !p.slice(1).some(h => inRing(lng, lat, h))));
+  }
+  globe.onGlobeClick(({ lat, lng }) => {
+    const f = featureAt(lat, lng);
+    if (!mode) { selectMenu(f && f.c ? f.c : null); return; }   // menu: click a country for its card and capital
+    if (!f) return;
+    if (mode === 'learn') { if (f.c) showLearn(f.c); else say(`${f.n} is not a UN member state`); return; }
+    const s = stateOf(f.c);
+    if (s === 'found') say(C[f.c].n, 'ok');
+    else if (s === 'missed') say(`${C[f.c].n} (missed)`, 'dup');
+    else if (!f.c) say(`${f.n} is not a UN member and isn't counted`);
+    else if (s === 'target') say('This is the one to name', 'target');
+    else say('Not found yet');
+  });
+  globe.onPointClick(p => { if (!mode) { if (!p.pin) selectMenu(p.code); return; } if (p.pin) return; if (mode === 'learn') { showLearn(p.code); return; } const s = stateOf(p.code); say(s === 'found' ? C[p.code].n : s === 'missed' ? `${C[p.code].n} (missed)` : s === 'target' ? 'This is the one to name' : 'Not found yet', s === 'found' ? 'ok' : s === 'target' ? 'target' : ''); });
+  // ----- menu only: point at a country to light it up, with a pin and its name above
+  let hoverCode = null, hoverRaf = 0, hoverXY = null, pressing = false;
+  let menuSel = null;                 // country clicked on the menu screen
+  const pinLabel = (cls, html) => { const d = document.createElement('div'); d.className = 'cap-pin ' + cls; d.innerHTML = `<span>${html}</span>`; return d; };
+  // pins for the menu: the selected country (red pin + name, teal pin on its capital) and the hovered one
+  function menuPins() {
+    const pts = [], tags = [];
+    if (menuSel) {
+      const [lat, lng] = C[menuSel].ll, [, , cap, clat, clng] = LEARN[menuSel];
+      pts.push({ pin: true, code: menuSel, lat, lng }, { pin: true, cap: true, code: menuSel, lat: clat, lng: clng });
+      tags.push({ lat, lng, el: pinLabel('', C[menuSel].n) }, { lat: clat, lng: clng, el: pinLabel('capital', `<small>Capital</small>${cap}`) });
+    }
+    if (hoverCode && hoverCode !== menuSel) {
+      const [lat, lng] = C[hoverCode].ll;
+      pts.push({ pin: true, code: hoverCode, lat, lng });
+      tags.push({ lat, lng, el: pinLabel('', C[hoverCode].n) });
+    }
+    globe.pointsData(pts.length ? SMALL.concat(pts) : SMALL);
+    globe.htmlElementsData(tags);
+    globe.ringsData(menuSel ? [{ lat: LEARN[menuSel][3], lng: LEARN[menuSel][4], r: 1.4, cap: true }] : []);
+  }
+  let hoverPaintT = 0;
+  function setHover(code) {
+    if (code === hoverCode || mode) return;
+    hoverCode = code;
+    el.style.cursor = code ? 'pointer' : '';
+    menuPins();                                   // pin and name: instant and cheap
+    clearTimeout(hoverPaintT);                    // amber fill: once the mouse rests, so sweeping across
+    hoverPaintT = setTimeout(() => { if (!mode) paint(); }, 70);   // the globe doesn't repaint every country it passes
+  }
+  function selectMenu(code) {
+    if (mode) return;
+    if (code === menuSel) return;
+    menuSel = code;
+    paint(); menuPins();
+    if (!code) { $('learncard').hidden = true; return; }
+    fillCard(code, true);
+    flyBetween(code);
+  }
+  el.addEventListener('pointermove', e => {
+    if (mode || pressing || e.pointerType === 'touch' || typeof globe.toGlobeCoords !== 'function') return;
+    const r = el.getBoundingClientRect();
+    hoverXY = [e.clientX - r.left, e.clientY - r.top];
+    if (hoverRaf) return;
+    hoverRaf = requestAnimationFrame(() => {
+      hoverRaf = 0;
+      if (mode) return;
+      const g = globe.toGlobeCoords(hoverXY[0], hoverXY[1]);
+      const f = g && featureAt(g.lat, g.lng);
+      setHover(f && f.c ? f.c : null);
+    });
+  });
+  el.addEventListener('pointerdown', () => { pressing = true; });
+  window.addEventListener('pointerup', () => { pressing = false; });
+  el.addEventListener('pointerleave', () => { if (!mode) setHover(null); });
+  const ctr = globe.controls();
+  ctr.autoRotate = true; ctr.autoRotateSpeed = 0.35; ctr.enableDamping = true;
+  ctr.minDistance = 101 + 8;
+  el.addEventListener('pointerdown', () => { ctr.autoRotate = false; });
+
+  function stateOf(code) {
+    if (!code) return 'none';
+    if (!mode && (code === hoverCode || code === menuSel)) return 'target';   // menu hover / selection
+    if (mode && mode !== 'learn' && !ACTIVE.has(code)) return 'out';   // outside the chosen region: dimmed
+    if (found.has(code)) return 'found';
+    if (revealed) return 'missed';
+    if (mode === 'map' && code === target) return 'target';
+    if (mode === 'learn' && code === learnCode) return 'target';
+    return 'unknown';
+  }
+  const SMALL_SET = new Set(SMALL.map(p => p.code));
+  const pointCol = p => { if (p.pin) return css(p.cap ? '--cap' : '--pin'); const s = stateOf(p.code); return s === 'found' ? '#7ab8ff' : s === 'missed' ? COL.missed : s === 'target' ? COL.target : '#9aa6bd'; };
+  const pointPainted = new Map();
+  function paint() {
+    pushTexture();
+    // the small-country markers are one merged mesh; rebuild it only if one of them changed colour
+    if (SMALL.some(p => pointPainted.get(p.code) !== pointCol(p))) {
+      SMALL.forEach(p => pointPainted.set(p.code, pointCol(p)));
+      globe.pointColor(pointCol);
+    }
+  }
+  paint();
+
+  // ui
+  const $ = id => document.getElementById(id);
+  const input = $('answer'), toast = $('toast'), panel = $('panel');
+  const REGIONS = ['Africa', 'Asia', 'Europe', 'North America', 'South America', 'Oceania'];
+  const REGION_VIEW = { World: [20, 96, 2.3], Africa: [3, 20, 1.7], Asia: [32, 92, 2.0], Europe: [52, 16, 1.25],
+    'North America': [30, -92, 1.8], 'South America': [-18, -60, 1.6], Oceania: [-14, 156, 1.9] };
+  const byRegion = {}; REGIONS.forEach(r => byRegion[r] = CODES.filter(c => C[c].r === r).sort((a, b) => C[a].n.localeCompare(C[b].n)));
+  const MODES = {
+    free: { name: 'Free mode', tag: 'Name them all in any order. Type a name, it lights up.',
+      desc: 'Type every country you can think of, in any order. Each one lights up blue on the globe.' },
+    map: { name: 'Map mode', tag: 'Name the country highlighted in amber.',
+      desc: 'The globe flies to a real country and highlights it in amber. Type its name to move to the next one.' },
+    flag: { name: 'Flag mode', tag: 'Name the country this flag belongs to.',
+      desc: 'A national flag appears above the answer box. Name its country and the globe shows you where it is.' },
+  };
+  MODES.learn = { name: 'Learn mode', tag: 'Explore every country: flag, location and capital.',
+    desc: 'No timer, no score. Browse each country’s flag, location and capital, with a pin on the capital’s exact coordinates.' };
+  const QUIZ = { map: 1, flag: 1 };
+  const LEARN = JSON.parse(document.getElementById('learndata').textContent);   // code → [official name, subregion, capital, lat, lng]
+  const ORDER = CODES.slice().sort((a, b) => C[a].n.localeCompare(C[b].n));
+  let learnCode = null; const viewed = new Set();               // modes that ask about one country at a time
+  const FLAGS = JSON.parse(document.getElementById('flagdata').textContent);
+  const flagURL = code => 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(FLAGS[code] || '');
+  let gameId = 0;                                  // bumps on every new game so stale timers do nothing
+  // Phone layouts are chosen from the device's real orientation. A CSS orientation query reads the
+  // visible area instead, and the on-screen keyboard makes that wider than tall, so typing used to
+  // switch an upright phone to the compact sideways layout and shrink the answer box.
+  function phoneLayout() {
+    const root = document.documentElement;
+    const typing = document.activeElement === input;
+    // while the keyboard is up, keep whatever layout was showing; re-check once typing stops
+    if (typing && (root.classList.contains('upright') || root.classList.contains('sideways'))) return;
+    const short = Math.min(screen.width, screen.height);
+    const sideways = screen.orientation && screen.orientation.type ? screen.orientation.type.startsWith('landscape')
+      : typing ? root.classList.contains('sideways') : window.innerWidth > window.innerHeight;
+    const phone = short <= 520 || window.innerWidth <= 760;
+    root.classList.toggle('sideways', phone && sideways && short <= 520);
+    root.classList.toggle('upright', phone && !sideways && window.innerWidth <= 760);
+  }
+  phoneLayout();
+  window.addEventListener('resize', phoneLayout);
+  input.addEventListener('blur', () => setTimeout(phoneLayout, 300));
+  if (screen.orientation && screen.orientation.addEventListener) screen.orientation.addEventListener('change', phoneLayout);
+  const isNarrow = () => document.documentElement.classList.contains('upright') || document.documentElement.classList.contains('sideways');
+
+  const bestKey = (m, r) => 'nec-best-' + m + (r && r !== 'World' ? '-' + r : '');
+  function getBest(m, r) { try { return JSON.parse(localStorage.getItem(bestKey(m, r)) || 'null'); } catch (e) { return null; } }
+
+  let view = 'menu';
+  function menuHTML() {
+    return `<div class="menu"><h2>Choose a mode</h2><p>Three timed quizzes, for the whole world or one region, and Learn mode to study first.</p>` +
+      Object.entries(MODES).map(([k, m]) => {
+        if (k === 'learn') return `<button class="mode ${k}" data-mode="${k}"><span class="mode-name"><span class="swatch"></span>${m.name}</span>
+          <span class="mode-desc">${m.desc}</span><span class="mode-best">Browse at your own pace</span></button>`;
+        const b = getBest(k, 'World');
+        const chips = ['World', ...REGIONS].map(r => {
+          const n = r === 'World' ? TOTAL : byRegion[r].length, rb = getBest(k, r);
+          return `<button class="rchip" data-mode="${k}" data-region="${r}" title="${rb ? `Best: ${rb.n}/${n} in ${fmt(rb.t)}` : 'No best score yet'}">${r}<small>${n}</small></button>`;
+        }).join('');
+        return `<div class="mode ${k}"><span class="mode-name"><span class="swatch"></span>${m.name}</span>
+          <span class="mode-desc">${m.desc}</span>
+          <div class="regions" role="group" aria-label="${m.name} region">${chips}</div>
+          <span class="mode-best">${b ? `World best: ${b.n}/${TOTAL} in ${fmt(b.t)}` : 'Pick a region to start'}</span></div>`;
+      }).join('') + `<div class="menu-foot"><button class="linkbtn" data-act="credits">Credits</button></div></div>`;
+  }
+  function learnListHTML() {
+    return `<div class="panel-head"><span class="tag"><b>Learn mode</b> · ${viewed.size}/${TOTAL} viewed</span><button class="linkbtn" data-act="menu">Menu</button></div>` +
+      REGIONS.map(r => `<section class="region"><div class="region-head"><span>${r}</span><span>${byRegion[r].filter(c => viewed.has(c)).length}/${byRegion[r].length}</span></div>
+        <div class="names" style="margin-top:8px">${byRegion[r].map(c => `<button data-code="${c}" class="${c === learnCode ? 'cur' : viewed.has(c) ? 'seen' : ''}">${C[c].n}</button>`).join('')}</div></section>`).join('');
+  }
+  function progressHTML() {
+    if (mode === 'learn') return learnListHTML();
+    return `<div class="panel-head"><span class="tag"><b>${MODES[mode].name}</b> · ${region}</span><button class="linkbtn" data-act="menu">Menu</button></div>` +
+      (region === 'World' ? REGIONS : [region]).map(r => {
+        const list = byRegion[r];
+        const got = list.filter(c => found.has(c));
+        const shown = revealed ? list : got;
+        return `<section class="region"><div class="region-head"><span>${r}</span><span>${got.length}/${list.length}</span></div>
+          <div class="bar"><i style="width:${(got.length / list.length * 100).toFixed(1)}%"></i></div>
+          <div class="names">${shown.map(c => `<span class="${found.has(c) ? '' : 'miss'}">${C[c].n}</span>`).join('')}</div></section>`;
+      }).join('');
+  }
+  function renderPanel() {
+    panel.innerHTML = view === 'menu' ? menuHTML() : progressHTML();
+    panel.classList.toggle('is-menu', view === 'menu');
+    $('count').innerHTML = `${mode === 'learn' ? viewed.size : found.size}<small>/${mode === 'learn' ? TOTAL : goal()}</small>`;
+    if (mode === 'learn' && view === 'progress') { const cur = panel.querySelector('.cur'); if (cur) cur.scrollIntoView({ block: 'nearest' }); }
+  }
+  // slide the column out to the right, swap its content, slide it back in
+  let sliding = false;
+  function slideTo(next, then) {
+    if (sliding) return;
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (isCollapsed()) { view = next; if (then) then(); renderPanel(); setPanel(true); return; }
+    sliding = true;
+    panel.classList.add('out');
+    setTimeout(() => {
+      view = next;
+      if (then) then();
+      renderPanel(); panel.scrollTop = 0;
+      requestAnimationFrame(() => {
+        panel.classList.remove('out');
+        setTimeout(() => { sliding = false; }, reduce ? 0 : 340);
+      });
+    }, reduce ? 0 : 360);
+  }
+  panel.addEventListener('click', e => {
+    const m = e.target.closest('[data-mode]');
+    if (m) { slideTo('progress', () => startMode(m.dataset.mode, m.dataset.region)); return; }
+    if (e.target.closest('[data-act="menu"]')) askMenu();
+    if (e.target.closest('[data-act="credits"]')) { $('credits').hidden = false; $('crClose').focus(); }
+    const cb = e.target.closest('[data-code]');
+    if (cb && mode === 'learn') showLearn(cb.dataset.code);
+  });
+
+  const fmt = ms => { const s = Math.floor(ms / 1000); const h = Math.floor(s / 3600); const m = Math.floor(s % 3600 / 60); const ss = s % 60;
+    return (h ? h + ':' + String(m).padStart(2, '0') : String(m).padStart(2, '0')) + ':' + String(ss).padStart(2, '0'); };
+  const now = () => elapsed + (startAt ? performance.now() - startAt : 0);
+  function tick() { $('time').textContent = fmt(now()); }
+  function startTimer() { if (startAt || revealed || !mode) return; startAt = performance.now(); timerId = setInterval(tick, 250); }
+  function stopTimer() { elapsed = now(); startAt = null; clearInterval(timerId); tick(); }
+
+  function say(msg, cls) { toast.textContent = msg; toast.className = 'toast' + (cls ? ' ' + cls : ''); }
+
+  const altFor = a => a > 5e6 ? 1.9 : a > 1e6 ? 1.5 : a > 1e5 ? 1.1 : a > 1e4 ? 0.8 : 0.55;
+  function flyTo(code) {
+    const ll = C[code].ll;
+    ctr.autoRotate = false;
+    // start the flight after the new map has been uploaded, so the upload frame doesn't eat the animation
+    requestAnimationFrame(() => flyCam(ll[0], ll[1], altFor(C[code].a)));
+  }
+  function setRing(code) {
+    if (!code || C[code].a > 30000) { globe.ringsData([]); return; }
+    globe.ringsData([{ lat: C[code].ll[0], lng: C[code].ll[1], r: C[code].a < 3000 ? 1.6 : 2.6 }]);
+  }
+
+  // ----- map mode: one highlighted country at a time
+  function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+  function nextTarget() {
+    const prev = target;
+    target = null;
+    if (prev && !found.has(prev)) paint();           // a skipped country goes back to grey
+    while (queue.length && found.has(queue[0])) queue.shift();
+    if (!queue.length) { setRing(null); return; }
+    target = queue.shift();
+    if (mode === 'flag') { showFlag(target); say('Which country has this flag?', 'target'); return; }
+    paint(); setRing(target); flyTo(target);
+    say('Which country is this?', 'target');
+  }
+  // decode flag images off the main thread before showing them; big coats of arms no longer cause a hitch
+  const flagCache = new Map();
+  function flagImage(code) {
+    if (!flagCache.has(code)) {
+      const im = new Image(); im.src = flagURL(code);
+      flagCache.set(code, (im.decode ? im.decode() : Promise.resolve()).catch(() => {}).then(() => im.src));
+    }
+    return flagCache.get(code);
+  }
+  function setFlag(img, code) { img.dataset.code = code; flagImage(code).then(src => { if (img.dataset.code === code) img.src = src; }); }
+  function showFlag(code) {
+    const card = $('flagcard'), img = $('flagimg');
+    card.hidden = false; card.classList.remove('right'); card.classList.add('swap');
+    img.dataset.code = code;
+    flagImage(code).then(src => { if (img.dataset.code !== code) return; img.src = src; requestAnimationFrame(() => card.classList.remove('swap')); });
+    if (queue[0]) flagImage(queue[0]);          // get the next flag ready while this one is on screen
+  }
+  function skip() {
+    if (!QUIZ[mode] || revealed || !target || busy) return;
+    queue.push(target);
+    nextTarget();
+    say(`Skipped, it will come back later. ${mode === 'flag' ? 'Which country has this flag?' : 'Which country is this?'}`, 'target');
+    input.value = ''; input.focus();
+  }
+
+  function accept(code) {
+    clearTimeout(pendingId); pendingId = null;
+    found.add(code);
+    input.value = '';
+    input.classList.add('flash'); setTimeout(() => input.classList.remove('flash'), 250);
+    say(`${C[code].n} ✓`, 'ok');
+    paint(); renderPanel();
+    if (found.size === goal()) { finish(true); return; }
+    if (QUIZ[mode]) {
+      setRing(null); busy = true;
+      const id = gameId;
+      // in flag mode, fly to the country first so the player sees where that flag belongs
+      if (mode === 'flag') { $('flagcard').classList.add('right'); flyTo(code); }
+      setTimeout(() => { if (id !== gameId) return; busy = false; if (!revealed) nextTarget(); }, mode === 'flag' ? 1300 : 650);
+    } else flyTo(code);
+  }
+
+  // Free mode: accept as soon as the typed text is a full name, except when it is also the start of
+  // another unfound country's name (Niger → Nigeria, Guinea → Guinea-Bissau). Then wait for Enter or a short pause.
+  // Map and Flag mode: only the country being asked about counts.
+  // Learn mode: the box is a search. A full name jumps straight there; Enter takes the first name that starts with it.
+  function learnSearch(commit) {
+    const v = norm(input.value);
+    if (!v) return;
+    let code = KEY.get(v);
+    if (!code && commit) { for (const c of ORDER) if (C[c].k.some(k => k.startsWith(v))) { code = c; break; } }
+    if (code) { if (code !== learnCode) showLearn(code); if (commit) input.select(); }
+    else if (commit) say('No country by that name. Try another spelling.', 'dup');
+  }
+  function check(commit) {
+    if (mode === 'learn') return learnSearch(commit);
+    if (revealed || !mode || busy) return;
+    const v = norm(input.value);
+    if (!v) { clearTimeout(pendingId); return; }
+    startTimer();
+    const code = KEY.get(v);
+    if (QUIZ[mode]) {
+      if (code && code === target) return accept(code);
+      if (commit) say(code ? `Not ${C[code].n}. Try again or skip.` : 'That name isn’t on the list. Try again or skip.', 'dup');
+      return;
+    }
+    if (!code) { clearTimeout(pendingId); return; }
+    if (!ACTIVE.has(code)) { say(`${C[code].n} isn't in ${region}`, 'dup'); return; }
+    if (found.has(code)) { say(`${C[code].n} is already on the map`, 'dup'); return; }
+    if (commit) return accept(code);
+    let ambiguous = false;
+    for (const [k, c] of KEY) { if (c !== code && ACTIVE.has(c) && !found.has(c) && k.length > v.length && k.startsWith(v)) { ambiguous = true; break; } }
+    clearTimeout(pendingId);
+    if (ambiguous) pendingId = setTimeout(() => { if (KEY.get(norm(input.value)) === code) accept(code); }, 700);
+    else accept(code);
+  }
+  input.addEventListener('input', () => check(false));
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); check(true); }
+    else if (mode === 'learn' && !input.value && (e.key === 'ArrowRight' || e.key === 'ArrowLeft')) { e.preventDefault(); stepLearn(e.key === 'ArrowRight' ? 1 : -1); }
+  });
+
+  // ----- learn mode: one country at a time, with a pin on its capital
+  const fmtCoord = (lat, lng) => `${Math.abs(lat).toFixed(2)}°${lat >= 0 ? 'N' : 'S'}, ${Math.abs(lng).toFixed(2)}°${lng >= 0 ? 'E' : 'W'}`;
+  function showLearn(code) {
+    if (!C[code]) return;
+    learnCode = code; viewed.add(code);
+    const [official, sub, cap, lat, lng] = LEARN[code];
+    paint();
+    // capital pin: a 3D marker standing on the exact coordinates, with the name floating above it
+    const label = document.createElement('div');
+    label.className = 'cap-pin';
+    label.innerHTML = `<span><small>Capital</small>${cap}</span>`;
+    globe.pointsData(SMALL.concat([{ pin: true, code, lat, lng }]));
+    globe.htmlElementsData([{ lat, lng, el: label }]);
+    globe.ringsData([{ lat, lng, r: 1.4, pin: true }]);
+    fillCard(code, false);
+    say(`${ORDER.indexOf(code) + 1} of ${TOTAL} · type a name to jump, or use ‹ › and click the map`);
+    renderPanel();
+    flyBetween(code);
+  }
+  // the info card used by Learn mode and by clicking a country on the menu
+  function fillCard(code, inMenu) {
+    const [official, sub, cap, lat, lng] = LEARN[code];
+    const card = $('learncard');
+    card.hidden = false; card.classList.add('swap'); card.classList.toggle('menu-sel', inMenu);
+    $('lcClose').hidden = !inMenu;
+    setFlag($('lcFlag'), code); $('lcFlag').alt = `Flag of ${C[code].n}`;
+    $('lcRegion').textContent = `${C[code].r} · ${sub}`;
+    $('lcName').textContent = C[code].n;
+    $('lcOfficial').textContent = official !== C[code].n ? official : '';
+    $('lcCap').textContent = cap;
+    $('lcCoord').textContent = fmtCoord(lat, lng);
+    $('lcArea').textContent = `${Math.round(C[code].a).toLocaleString('en-US')} km²`;
+    requestAnimationFrame(() => card.classList.remove('swap'));
+  }
+  // aim between the country and its capital so both stay in view
+  function flyBetween(code) {
+    const cl = C[code].ll, lat = LEARN[code][3], lng = LEARN[code][4];
+    ctr.autoRotate = false;
+    requestAnimationFrame(() => flyCam((cl[0] + lat) / 2, Math.abs(cl[1] - lng) < 180 ? (cl[1] + lng) / 2 : lng, Math.max(0.7, altFor(C[code].a))));
+  }
+  $('lcClose').addEventListener('click', () => selectMenu(null));
+  function stepLearn(dir) {
+    const i = learnCode ? ORDER.indexOf(learnCode) : -1;
+    showLearn(ORDER[(i + dir + TOTAL) % TOTAL]);
+    input.value = '';
+  }
+  function clearLearn() {
+    learnCode = null; viewed.clear();
+    globe.pointsData(SMALL); globe.htmlElementsData([]);
+    $('learncard').hidden = true;
+  }
+  $('prev').addEventListener('click', () => { stepLearn(-1); input.focus(); });
+  $('next').addEventListener('click', () => { stepLearn(1); input.focus(); });
+
+  function finish(won) {
+    stopTimer(); revealed = true; input.disabled = true; $('skip').disabled = true; $('giveUp').disabled = true;
+    target = null; setRing(null); $('flagcard').hidden = true;
+    paint(); renderPanel();
+    const best = getBest(mode, region), G = goal();
+    const isBest = !best || found.size > best.n || (found.size === best.n && elapsed < best.t);
+    if (isBest) { try { localStorage.setItem(bestKey(mode, region), JSON.stringify({ n: found.size, t: elapsed })); } catch (e) {} }
+    $('resTitle').textContent = won ? 'Every country named' : 'Time to study the map';
+    $('resScore').textContent = `${found.size}/${G}`;
+    $('resText').textContent = `${MODES[mode].name} · ${region} · ${fmt(elapsed)}. ` + (won ? '' : `${G - found.size} missed, now shown in red. `) +
+      (isBest ? 'New personal best.' : `Your best: ${best.n}/${G} in ${fmt(best.t)}.`);
+    $('overlay').hidden = false;
+    say(won ? `All ${G} found.` : 'Click a red country to see its name.');
+    ctr.autoRotate = true;
+  }
+
+  function clearGame() {
+    found = new Set(); revealed = false; elapsed = 0; startAt = null; clearInterval(timerId); clearTimeout(pendingId);
+    target = null; queue = []; busy = false; setRing(null); tick(); gameId++;
+    hoverCode = null; menuSel = null; el.style.cursor = '';
+    $('flagcard').hidden = true; clearLearn();
+    input.value = ''; $('overlay').hidden = true;
+  }
+  function startMode(m, r) {
+    clearGame();
+    mode = m;
+    region = m !== 'learn' && REGION_VIEW[r] ? r : 'World';
+    ACTIVE = new Set(region === 'World' ? CODES : CODES.filter(c => C[c].r === region));
+    $('tagline').textContent = MODES[m].tag + (m !== 'learn' ? ` Region: ${region} (${ACTIVE.size}).` : '');
+    input.disabled = false; $('giveUp').disabled = false;
+    $('skip').hidden = !QUIZ[m]; $('skip').disabled = false;
+    const learn = m === 'learn';
+    $('stats').hidden = false;
+    $('prev').hidden = $('next').hidden = !learn; $('giveUp').hidden = learn;
+    $('timeStat').hidden = learn; $('countLabel').textContent = learn ? 'Viewed' : 'Found';
+    input.placeholder = learn ? 'Search a country… e.g. Myanmar' : m === 'map' ? 'Name the amber country…' : m === 'flag' ? 'Name this flag’s country…' : 'Type a country… e.g. Myanmar';
+    paint(); renderPanel();
+    if (learn) showLearn(ORDER[0]);
+    else if (QUIZ[m]) { queue = shuffle([...ACTIVE]); startTimer(); nextTarget(); }
+    else { const v = REGION_VIEW[region]; say('Start typing. The timer starts with your first letter.'); flyCam(v[0], v[1], v[2], 1000); }
+    if (isNarrow()) setTimeout(() => setPanel(false), 700);
+    input.focus();
+  }
+  function openMenu() {
+    if (mode && !revealed) stopTimer();
+    clearGame(); mode = null; region = 'World'; ACTIVE = new Set(CODES);
+    input.disabled = true; input.placeholder = 'Choose a mode first'; $('giveUp').disabled = true; $('skip').hidden = true;
+    $('stats').hidden = true;
+    $('prev').hidden = $('next').hidden = true; $('giveUp').hidden = false; $('timeStat').hidden = false; $('countLabel').textContent = 'Found';
+    $('tagline').textContent = '193 UN member states. Pick a mode to start.';
+    say('Choose a mode from the menu to start.');
+    // repaint while the column is off-screen so the slide itself stays smooth
+    slideTo('menu', paint);
+    ctr.autoRotate = true;
+  }
+
+  $('giveUp').addEventListener('click', () => { if (mode && mode !== 'learn' && !revealed) $('confirm').hidden = false; });
+  $('skip').addEventListener('click', skip);
+  $('cfNo').addEventListener('click', () => { $('confirm').hidden = true; input.focus(); });
+  $('cfYes').addEventListener('click', () => { $('confirm').hidden = true; finish(false); });
+  $('againBtn').addEventListener('click', () => startMode(mode, region));
+  $('menuBtn2').addEventListener('click', () => { $('overlay').hidden = true; openMenu(); });
+  $('reviewBtn').addEventListener('click', () => { $('overlay').hidden = true; });
+  const dock = $('dock'), handle = $('handle');
+  const isCollapsed = () => dock.classList.contains('collapsed');
+  function setPanel(open) {
+    dock.classList.toggle('collapsed', !open);
+    handle.setAttribute('aria-expanded', String(open));
+    handle.setAttribute('aria-label', open ? 'Hide side panel' : 'Show side panel');
+    panel.inert = !open;
+  }
+  handle.addEventListener('click', () => setPanel(isCollapsed()));
+  // the Menu button always works; mid-game it asks first
+  function askMenu() {
+    if (!mode) { setPanel(true); return; }
+    if (!revealed && (found.size || QUIZ[mode])) { $('leave').hidden = false; return; }
+    $('overlay').hidden = true; openMenu();
+  }
+  $('menuBtn').addEventListener('click', askMenu);
+  $('crClose').addEventListener('click', () => { $('credits').hidden = true; });
+  $('credits').addEventListener('click', e => { if (e.target.id === 'credits') $('credits').hidden = true; });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('credits').hidden) $('credits').hidden = true; });
+  $('lvNo').addEventListener('click', () => { $('leave').hidden = true; input.focus(); });
+  $('lvYes').addEventListener('click', () => { $('leave').hidden = true; openMenu(); });
+
+  window.addEventListener('resize', () => globe.width(window.innerWidth).height(window.innerHeight));
+
+  // keep progress across live page updates
+  if (hot && hot.snapshot) hot.snapshot(() => ({ mode, region, found: [...found], elapsed: now(), revealed, target, queue, learn: learnCode, viewed: [...viewed] }));
+  function boot(d) {
+    d = d || {};
+    if (d.mode === 'learn') {
+      startMode('learn'); view = 'progress';
+      (d.viewed || []).forEach(c => C[c] && viewed.add(c));
+      if (C[d.learn]) showLearn(d.learn); else renderPanel();
+      return;
+    }
+    if (d.mode && MODES[d.mode]) {
+      startMode(d.mode, d.region);
+      stopTimer();
+      found = new Set((d.found || []).filter(c => C[c])); elapsed = d.elapsed || 0; revealed = !!d.revealed;
+      if (QUIZ[d.mode]) { queue = (d.queue || []).filter(c => C[c]); target = C[d.target] ? d.target : null; if (target) { if (d.mode === 'flag') showFlag(target); else setRing(target); } else nextTarget(); }
+      view = 'progress';
+      if (revealed) { input.disabled = true; $('giveUp').disabled = true; $('skip').disabled = true; } else startTimer();
+      paint(); renderPanel(); tick();
+      if (target) say(d.mode === 'flag' ? 'Which country has this flag?' : 'Which country is this?', 'target');
+      return;
+    }
+    view = 'menu'; renderPanel(); tick();
+  }
+  if (hot && hot.ready) hot.ready(boot); else boot(hot && hot.data);
+})();
+</script>
